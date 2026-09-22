@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: puller
+  namespace: default
+  labels:
+    app: puller
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # avoid two pods polling/triggering concurrently during a rollout
+  selector:
+    matchLabels:
+      app: puller
+  template:
+    metadata:
+      labels:
+        app: puller
+    spec:
+      # Attach an IRSA (or equivalent) annotation to this ServiceAccount for
+      # ECR access instead of static AWS keys, e.g.:
+      #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/puller-ecr-reader
+      serviceAccountName: puller
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: puller
+          image: puller:latest
+          imagePullPolicy: IfNotPresent
+          args: ["--config", "/etc/puller/config.yaml"]
+          env:
+            - name: DOCKERHUB_USERNAME
+              value: "your-dockerhub-username"
+            - name: GHCR_USERNAME
+              value: "your-github-username"
+          ports:
+            - name: http
+              containerPort: 8080
+          volumeMounts:
+            - name: config
+              mountPath: /etc/puller
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/puller
+            - name: dockerhub-creds
+              mountPath: /run/secrets/dockerhub
+              readOnly: true
+            - name: ghcr-creds
+              mountPath: /run/secrets/ghcr
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+      terminationGracePeriodSeconds: 60
+      volumes:
+        - name: config
+          configMap:
+            name: puller-config
+        - name: state
+          persistentVolumeClaim:
+            claimName: puller-state
+        - name: dockerhub-creds
+          secret:
+            secretName: puller-dockerhub-creds
+        - name: ghcr-creds
+          secret:
+            secretName: puller-ghcr-creds
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: puller
+  namespace: default

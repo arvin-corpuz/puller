@@ -1,0 +1,13 @@
+services:
+  puller:
+    build: .
+    volumes:
+      - ./config/config.example.yaml:/etc/puller/config.yaml:ro
+      - puller-state:/var/lib/puller
+      - ./secrets:/run/secrets:ro
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  puller-state:

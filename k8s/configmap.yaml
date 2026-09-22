@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: puller-config
+  namespace: default
+data:
+  config.yaml: |
+    global:
+      log_level: info
+      state_file: /var/lib/puller/state.json
+      default_poll_interval_seconds: 60
+      health:
+        bind_host: 0.0.0.0
+        bind_port: 8080
+
+    registries:
+      - name: dockerhub-public
+        type: docker_v2
+        base_url: https://registry-1.docker.io
+        auth:
+          username: {env: DOCKERHUB_USERNAME}
+          password: {file: /run/secrets/dockerhub/password}
+
+      - name: ghcr-main
+        type: ghcr
+        base_url: https://ghcr.io
+        auth:
+          username: {env: GHCR_USERNAME}
+          password: {file: /run/secrets/ghcr/pat}
+
+      - name: ecr-prod
+        type: ecr
+        region: ap-southeast-1
+        account_id: "123456789012"
+        # No static credentials: relies on the pod's ServiceAccount IRSA
+        # role (see deployment.yaml) via the default AWS credential chain.
+
+    watchers:
+      - name: myapp-prod-semver
+        registry: ecr-prod
+        repository: myapp/backend
+        poll_interval_seconds: 30
+        rule:
+          type: semver
+          prefix: "v"
+          include_prerelease: false
+        command:
+          exec: ["/opt/scripts/deploy.sh"]
+          timeout_seconds: 300
+
+      - name: myapp-staging-floating
+        registry: ghcr-main
+        repository: myorg/myapp
+        poll_interval_seconds: 45
+        rule:
+          type: tag
+          tag: staging
+        command:
+          exec: ["/opt/scripts/deploy.sh", "--env", "staging"]
+          timeout_seconds: 120

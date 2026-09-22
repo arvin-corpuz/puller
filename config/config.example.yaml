@@ -1,0 +1,78 @@
+global:
+  log_level: info
+  state_file: /var/lib/puller/state.json
+  default_poll_interval_seconds: 60
+  health:
+    bind_host: 0.0.0.0
+    bind_port: 8080
+  http:
+    timeout_seconds: 10
+    max_concurrent_requests_per_registry: 4
+
+registries:
+  - name: dockerhub-public
+    type: docker_v2
+    base_url: https://registry-1.docker.io
+    auth:
+      username: {env: DOCKERHUB_USERNAME}
+      password: {file: /run/secrets/dockerhub_password}
+
+  - name: ghcr-main
+    type: ghcr
+    base_url: https://ghcr.io
+    auth:
+      username: my-github-username
+      password: {env: GHCR_PAT}
+
+  - name: ecr-prod
+    type: ecr
+    region: ap-southeast-1
+    account_id: "123456789012"
+    # No static access_key_id/secret_access_key below -> falls back to the
+    # default AWS credential chain (instance profile / IRSA in EKS).
+
+  - name: harbor-internal
+    type: docker_v2
+    base_url: https://harbor.internal.example.com
+    tls_verify: true
+    auth:
+      username: robot$puller
+      password: {file: /run/secrets/harbor_robot_token}
+
+watchers:
+  - name: myapp-prod-semver
+    registry: ecr-prod
+    repository: myapp/backend
+    poll_interval_seconds: 30
+    rule:
+      type: semver
+      prefix: "v"
+      pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+$"
+      include_prerelease: false
+    command:
+      exec: ["/opt/scripts/deploy.sh"]
+      timeout_seconds: 300
+      cwd: /opt/scripts
+      env:
+        DEPLOY_TARGET: production
+      env_passthrough: false
+
+  - name: myapp-staging-floating
+    registry: ghcr-main
+    repository: myorg/myapp
+    poll_interval_seconds: 45
+    rule:
+      type: tag
+      tag: staging
+    command:
+      exec: ["/opt/scripts/deploy.sh", "--env", "staging"]
+      timeout_seconds: 120
+
+  - name: public-base-image-latest
+    registry: dockerhub-public
+    repository: library/nginx
+    rule:
+      type: latest
+    command:
+      shell: "curl -sf -X POST https://internal-webhook/notify"
+      timeout_seconds: 30

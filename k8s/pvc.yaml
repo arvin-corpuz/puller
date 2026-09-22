@@ -1,0 +1,15 @@
+# Optional: gives the state file (last-seen digest per watcher) durability
+# across pod restarts. Without this PVC, the service still works correctly
+# -- it just silently re-baselines on every restart instead of remembering
+# what it last saw, so no false triggers occur, just no cross-restart memory.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: puller-state
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

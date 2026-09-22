@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "puller"
+version = "0.1.0"
+description = "Polls container image registries for updates and runs a command on change."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.6",
+    "PyYAML>=6.0",
+    "boto3>=1.34",
+    "semver>=3.0",
+    "structlog>=24.1",
+    "starlette>=0.37",
+    "uvicorn>=0.29",
+    "prometheus-client>=0.20",
+    "tenacity>=8.2",
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.20",
+    "moto>=5.0",
+    "freezegun>=1.4",
+]
+
+[project.scripts]
+puller = "puller.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["integration: requires docker (local registry:2 container)"]

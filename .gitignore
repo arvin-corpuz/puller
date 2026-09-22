@@ -1,0 +1,38 @@
+# Claude Code
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# State / runtime data
+state.json
+*.log
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store
