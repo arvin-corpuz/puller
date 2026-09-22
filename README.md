@@ -48,12 +48,7 @@ cp config/config.example.yaml config.yaml
 .venv/bin/python -m puller --config config.yaml          # run the daemon
 ```
 
-Or with Docker Compose:
-
-```bash
-cp config/config.example.yaml config.yaml
-docker compose up --build
-```
+Or with Docker Compose — see [Deploying with Docker Compose](#deploying-with-docker-compose) below.
 
 ## Configuration
 
@@ -169,16 +164,134 @@ python -m puller --config <path> [--validate-config] [--once] [--log-level LEVEL
   connectivity and rule configuration.
 - `--log-level` — override `global.log_level`.
 
-## Running in Kubernetes
+## Deploying with Docker Compose
 
-Manifests are in [`k8s/`](k8s/):
+Prebuilt images are published to
+[`mryozo/puller`](https://hub.docker.com/repository/docker/mryozo/puller/general)
+on Docker Hub (see [Releasing](#releasing)), so you don't have to build
+locally unless you're developing against this repo.
+
+**1. Prepare your config and any secret files**
+
+```bash
+mkdir -p secrets
+cp config/config.example.yaml config.yaml
+# edit config.yaml: registries, watchers, rules, commands
+
+# for any registry auth using {file: ...} secret refs, drop the raw value in:
+echo -n "my-dockerhub-password" > secrets/dockerhub_password
+```
+
+Point the corresponding `{file: ...}` entries in `config.yaml` at
+`/run/secrets/<name>` — that's where `docker-compose.yml` mounts the
+`secrets/` directory. `{env: VAR}` entries can instead be set directly as
+`environment:` values on the service.
+
+**2. `docker-compose.yml`** (already included in this repo)
+
+```yaml
+services:
+  puller:
+    image: mryozo/puller:latest   # or `build: .` to build from source instead
+    environment:
+      - DOCKERHUB_USERNAME=your-dockerhub-username
+      - GHCR_PAT=your-github-pat
+    volumes:
+      - ./config.yaml:/etc/puller/config.yaml:ro
+      - puller-state:/var/lib/puller
+      - ./secrets:/run/secrets:ro
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+volumes:
+  puller-state:
+```
+
+**3. Run it**
+
+```bash
+docker compose up -d
+docker compose logs -f puller
+curl http://localhost:8080/healthz
+curl http://localhost:8080/readyz
+```
+
+`puller-state` is a named volume, so `state.json` survives `docker compose
+down` / `up` restarts.
+
+**4. Update to a new version**
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+(Skip `pull` if you're using `build: .` — run `docker compose up -d --build`
+instead after pulling repo changes.)
+
+## Deploying to Kubernetes
+
+Manifests are in [`k8s/`](k8s/); `deployment.yaml` already references the
+published `mryozo/puller:latest` image, so no local build is required. Pin
+to a specific version tag (e.g. `mryozo/puller:0.2.0`) for anything beyond
+testing, since `latest` will move on future releases.
+
+**1. Create the credential secrets**
+
+Rather than hand-editing `k8s/secret.yaml`, create secrets imperatively so
+real values never end up in a file you might commit:
+
+```bash
+kubectl create secret generic puller-dockerhub-creds \
+  --from-literal=password='your-dockerhub-password'
+kubectl create secret generic puller-ghcr-creds \
+  --from-literal=pat='your-github-pat'
+```
+
+These match the volume mounts already wired up in `k8s/deployment.yaml`
+(`/run/secrets/dockerhub/password`, `/run/secrets/ghcr/pat`) and the `{file:
+...}` refs in `k8s/configmap.yaml`.
+
+**2. Edit the config**
+
+Open [`k8s/configmap.yaml`](k8s/configmap.yaml) and adjust the embedded
+`config.yaml` — registries, watchers, rules, and commands — the same as the
+standalone config file (see [Configuration](#configuration) above). Note
+that `command.exec` runs *inside the container*, so any script it calls
+(e.g. `/opt/scripts/deploy.sh`) needs to be baked into a custom image or
+mounted in via an additional volume — the stock image only contains
+`puller` itself.
+
+**3. Apply everything**
 
 ```bash
 kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secret.yaml      # edit with real credentials first
+kubectl apply -f k8s/secret.yaml      # skip if you created secrets imperatively in step 1
 kubectl apply -f k8s/pvc.yaml         # optional, see note below
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
+```
+
+**4. Verify it's running**
+
+```bash
+kubectl rollout status deployment/puller
+kubectl logs -f deployment/puller
+kubectl port-forward deployment/puller 8080:8080
+curl http://localhost:8080/healthz
+curl http://localhost:8080/readyz
+curl http://localhost:8080/metrics | grep puller_
+```
+
+**5. Roll out a config or image change**
+
+```bash
+kubectl apply -f k8s/configmap.yaml        # after editing it
+kubectl rollout restart deployment/puller  # ConfigMap changes aren't picked up automatically
+
+# or, to move to a new image tag:
+kubectl set image deployment/puller puller=mryozo/puller:0.2.0
 ```
 
 Notes:

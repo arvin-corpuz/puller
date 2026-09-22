@@ -27,7 +27,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: puller
-          image: puller:latest
+          image: mryozo/puller:latest # pin to a version tag (e.g. mryozo/puller:0.2.0) for anything beyond testing
           imagePullPolicy: IfNotPresent
           args: ["--config", "/etc/puller/config.yaml"]
           env:
