@@ -14,11 +14,13 @@ from puller.registries.factory import RegistryClientFactory
 from puller.rules import RuleError, build_rule
 from puller.scheduler.supervisor import Supervisor
 from puller.state.store import JSONFileStateStore
+from puller.version import __version__
 
 log = get_logger(component="cli")
 
 
 @click.command()
+@click.version_option(version=__version__, prog_name="puller")
 @click.option(
     "--config",
     "config_path",

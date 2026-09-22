@@ -213,6 +213,45 @@ python3 -m venv .venv
 .venv/bin/pytest tests/integration -m integration -q   # spins up a local `registry:2` container, requires Docker
 ```
 
+## Releasing
+
+Docker images are published by [`.github/workflows/docker-publish.yml`](.github/workflows/docker-publish.yml)
+to [`mryozo/puller`](https://hub.docker.com/repository/docker/mryozo/puller/general)
+on Docker Hub. Every push and PR to `main` runs the test suite; **publishing
+only happens when a `vX.Y.Z` tag is pushed**, so `latest` on Docker Hub
+always matches the most recent tagged release rather than whatever's on
+`main`.
+
+To cut a release:
+
+```bash
+# 1. Bump the version
+#    Edit the `version` field in pyproject.toml (this is the single source
+#    of truth -- src/puller/version.py reads it back via importlib.metadata).
+
+# 2. Commit the bump
+git add pyproject.toml
+git commit -m "chore: release v0.2.0"
+git push origin main
+
+# 3. Tag and push the tag -- this is what triggers the publish workflow
+git tag -a v0.2.0 -m "v0.2.0"
+git push origin v0.2.0
+```
+
+That triggers the workflow to build a multi-arch (`linux/amd64`,
+`linux/arm64`) image and push `mryozo/puller:latest`, `:0.2.0`, and `:0.2`.
+Watch it under the repo's **Actions** tab, then confirm the new tags show up
+on Docker Hub.
+
+Required one-time setup (already done if the workflow is running): repo
+secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` under **Settings → Secrets
+and variables → Actions**.
+
+Optional but recommended for anything beyond a solo project: draft a GitHub
+Release for the tag (`gh release create v0.2.0 --generate-notes`) so there's
+a changelog entry alongside the image.
+
 ## Contributing
 
 Issues and pull requests are welcome. Please open an issue to discuss any
