@@ -260,8 +260,14 @@ Open [`k8s/configmap.yaml`](k8s/configmap.yaml) and adjust the embedded
 standalone config file (see [Configuration](#configuration) above). Note
 that `command.exec` runs *inside the container*, so any script it calls
 (e.g. `/opt/scripts/deploy.sh`) needs to be baked into a custom image or
-mounted in via an additional volume — the stock image only contains
-`puller` itself.
+mounted in via an additional volume. The stock image does ship with **Ruby
+and [Kamal](https://kamal-deploy.org/)** preinstalled (plus `git` and
+`openssh-client`), so a `command.shell: 'kamal deploy --version="$PULLER_MATCHED_TAG"'`
+trigger works out of the box — you just need to mount an SSH key and the
+target app's `config/deploy.yml` into the container and point `command.cwd`
+at it. `exec:` (array form) does **not** do shell variable expansion, so use
+`shell:` when you need `$PULLER_*` values substituted into the command
+itself rather than just passed as env vars.
 
 **3. Apply everything**
 
